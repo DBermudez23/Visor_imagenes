@@ -90,6 +90,11 @@ class MainWindow(QWidget):
         right_layout = QVBoxLayout()
         right_layout.setSpacing(12)
 
+        restore_button = QPushButton("Restaurar imagen")
+        restore_button.clicked.connect(self.reset_image)
+        right_layout.addWidget(restore_button)
+
+
         # ----- Slider de Brillo -----
         brightness_label = QLabel("Brillo")
         self.brightness_slider = QSlider(Qt.Orientation.Horizontal)
@@ -201,6 +206,15 @@ class MainWindow(QWidget):
     def apply_contrast_slider(self, mode=0):
         value = self.contrast_slider.value() / 100  # escala [0, 1]
         img = self.controller.adjust_contrast(value, mode)
+        self.show_image(img)
+
+    def apply_rotation(self):
+        angle = self.rotate_slider.value()
+        img = self.controller.rotate_manual(angle)
+        self.show_image(img)
+
+    def reset_image(self):
+        img = self.controller.reset_image()
         self.show_image(img)
 
     def apply_rotation(self):
