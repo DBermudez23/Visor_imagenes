@@ -8,7 +8,7 @@ from PyQt6.QtCore import Qt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import numpy as np
-from App.controller import ImageController
+from App.controller import Image_controller
 
 class MainWindow(QWidget):
     def __init__(self):
@@ -16,7 +16,7 @@ class MainWindow(QWidget):
         self.setWindowTitle("Visor de Imágenes")
         self.setGeometry(100, 100, 1400, 600)
 
-        self.controller = ImageController()
+        self.controller = Image_controller()
         self.image_path = ""
 
         self.init_ui()
@@ -113,6 +113,11 @@ class MainWindow(QWidget):
         discard_button.clicked.connect(self.discard_changes)
         right_layout.addWidget(discard_button)
 
+        # Botón para guardar imagen
+        save_button = QPushButton("Guardar imagen")
+        save_button.clicked.connect(self.save_image)
+        right_layout.addWidget(save_button)
+
         # ----- Slider de Brillo -----
         brightness_label = QLabel("Brillo")
         self.brightness_slider = QSlider(Qt.Orientation.Horizontal)
@@ -142,6 +147,38 @@ class MainWindow(QWidget):
         self.rotate_slider.valueChanged.connect(self.preview_rotation)
         right_layout.addWidget(rotate_label)
         right_layout.addWidget(self.rotate_slider)
+
+        # ----- Explorador para imagen a fusionar -----
+        fusion_label = QLabel("Fusionar con otra imagen:")
+        self.fusion_path_input = QLineEdit()
+        self.fusion_path_input.setPlaceholderText("Ruta de la imagen secundaria...")
+        self.fusion_path_input.setReadOnly(True)
+
+        self.fusion_browse_button = QPushButton("Explorar")
+        self.fusion_browse_button.clicked.connect(self.browse_fusion_image)
+
+        self.fusion_button = QPushButton("Fusionar imagen")
+        self.fusion_button.clicked.connect(self.apply_fusion)
+
+        fusion_file_layout = QHBoxLayout()
+        fusion_file_layout.addWidget(self.fusion_path_input)
+        fusion_file_layout.addWidget(self.fusion_browse_button)
+
+        right_layout.addWidget(fusion_label)
+        right_layout.addLayout(fusion_file_layout)
+        right_layout.addWidget(self.fusion_button)
+
+        # ----- Slider para el nivel de mezcla (alpha) -----
+        alpha_label = QLabel("Nivel de mezcla (alpha)")
+        self.alpha_slider = QSlider(Qt.Orientation.Horizontal)
+        self.alpha_slider.setMinimum(0)
+        self.alpha_slider.setMaximum(100)
+        self.alpha_slider.setValue(50)
+        self.alpha_slider.setTickInterval(10)
+        self.alpha_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+
+        right_layout.addWidget(alpha_label)
+        right_layout.addWidget(self.alpha_slider)
 
         right_layout.addStretch()
         self.right_panel.setLayout(right_layout)
@@ -204,7 +241,6 @@ class MainWindow(QWidget):
             self.image_label.setPixmap(pixmap)
             self.update_histogram(img_np)
 
-
     def preview_contrast(self, value, mode):
         img = self.controller.preview_contrast(value, mode)
         self.show_image(img)
@@ -247,6 +283,19 @@ class MainWindow(QWidget):
         img = self.controller.preview_rotate_manual(angle)
         self.show_image(img)
 
+    def browse_fusion_image(self):
+        file_path, _ = QFileDialog.getOpenFileName(self, "Seleccionar imagen para fusionar", "", "Images (*.png *.jpg *.jpeg *.bmp)")
+        if file_path:
+            self.fusion_path_input.setText(file_path)
+
+    def apply_fusion(self):
+        fusion_path = self.fusion_path_input.text()
+        if fusion_path:
+            other_img = self.controller.processor.read_image(fusion_path)
+            alpha = self.alpha_slider.value() / 100  # convertir a rango [0.0, 1.0]
+            img = self.controller.preview_fuse_with(other_img, alpha=alpha)
+            self.show_image(img)
+
     def apply_changes(self):
         self.controller.apply_preview()
         self.show_image(self.controller.get_processed_image())
@@ -258,3 +307,8 @@ class MainWindow(QWidget):
     def reset_image(self):
         img = self.controller.reset_image()
         self.show_image(img)
+
+    def save_image(self):
+        file_path, _ = QFileDialog.getSaveFileName(self, "Guardar imagen", "", "PNG Files (*.png);;JPEG Files (*.jpg *.jpeg);;BMP Files (*.bmp)")
+        if file_path:
+            self.controller.save_current_image(file_path)

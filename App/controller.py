@@ -1,6 +1,7 @@
 from .image_processor import ImageProcessor
+import numpy as np
 
-class ImageController:
+class Image_controller:
     def __init__(self):
         self.processor = ImageProcessor()
         self.original_image = None
@@ -93,3 +94,13 @@ class ImageController:
         if self.current_image is not None:
             self.preview_image = self.processor.extract_cmy_channel(self.current_image.copy(), channel)
         return self.preview_image
+    
+    def save_current_image(self, path):
+        """Guarda la imagen actual (preview) en la ruta especificada."""
+        img = self.get_processed_image()
+        if img is not None:
+            from PIL import Image
+            img_to_save = (img * 255).astype(np.uint8)
+            image = Image.fromarray(img_to_save)
+            image.save(path)
+
