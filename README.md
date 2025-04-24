@@ -30,7 +30,7 @@ cd visor_imagenes
 2. Crea y activa un entorno virtual:
 python -m venv venv
 source venv/bin/activate  # Linux/macOS
-venv\\Scripts\\activate   # Windows
+.\venvWindows\Scripts\Activate.ps1 # Windows
 
 3. Instala dependencias:
 pip install pyqt6 numpy matplotlib pillow

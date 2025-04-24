@@ -5,6 +5,8 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QPixmap, QImage
 from PyQt6.QtCore import Qt
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
 import numpy as np
 from App.controller import ImageController
 
@@ -54,12 +56,12 @@ class MainWindow(QWidget):
         left_layout.setSpacing(10)
 
         buttons = {
-            "Zonas Oscuras": lambda: self.apply_contrast(0.5, 0),
-            "Zonas Claras": lambda: self.apply_contrast(0.5, 1),
-            "Extraer RGB (Rojo)": lambda: self.apply_rgb(0),
-            "Extraer CMY (Cian)": lambda: self.apply_cmy(0),
-            "Blanco y Negro": self.apply_grayscale,
-            "Negativo": self.apply_negative
+            "Zonas Oscuras": lambda: self.preview_contrast(0.5, 0),
+            "Zonas Claras": lambda: self.preview_contrast(0.5, 1),
+            "Extraer RGB (Rojo)": lambda: self.preview_rgb(0),
+            "Extraer CMY (Cian)": lambda: self.preview_cmy(0),
+            "Blanco y Negro": self.preview_grayscale,
+            "Negativo": self.preview_negative
         }
 
         for label, action in buttons.items():
@@ -74,13 +76,20 @@ class MainWindow(QWidget):
         self.zoom_slider.setValue(5)
         self.zoom_slider.setTickInterval(1)
         self.zoom_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
-        self.zoom_slider.valueChanged.connect(self.apply_zoom)
+        self.zoom_slider.valueChanged.connect(self.preview_zoom)
 
         left_layout.addWidget(QLabel("Zoom (zona central):"))
         left_layout.addWidget(self.zoom_slider)
         left_layout.addStretch()
 
         self.left_panel.setLayout(left_layout)
+
+        # ----- Histograma embebido -----
+        self.hist_canvas = FigureCanvas(Figure(figsize=(4, 3)))
+        self.hist_axes = self.hist_canvas.figure.subplots()
+        left_layout.addWidget(QLabel("Histograma RGB:"))
+        left_layout.addWidget(self.hist_canvas)
+
 
         # ----- Panel derecho -----
         self.right_panel = QFrame()
@@ -94,6 +103,15 @@ class MainWindow(QWidget):
         restore_button.clicked.connect(self.reset_image)
         right_layout.addWidget(restore_button)
 
+        # Botón aplicar cambios
+        apply_button = QPushButton("Guardar cambios")
+        apply_button.clicked.connect(self.apply_changes)
+        right_layout.addWidget(apply_button)
+
+        # Botón descartar cambios
+        discard_button = QPushButton("Descartar cambios")
+        discard_button.clicked.connect(self.discard_changes)
+        right_layout.addWidget(discard_button)
 
         # ----- Slider de Brillo -----
         brightness_label = QLabel("Brillo")
@@ -101,7 +119,7 @@ class MainWindow(QWidget):
         self.brightness_slider.setMinimum(-100)
         self.brightness_slider.setMaximum(100)
         self.brightness_slider.setValue(0)
-        self.brightness_slider.valueChanged.connect(self.apply_brightness)
+        self.brightness_slider.valueChanged.connect(self.preview_brightness)
         right_layout.addWidget(brightness_label)
         right_layout.addWidget(self.brightness_slider)
 
@@ -111,7 +129,7 @@ class MainWindow(QWidget):
         self.contrast_slider.setMinimum(1)
         self.contrast_slider.setMaximum(100)
         self.contrast_slider.setValue(10)
-        self.contrast_slider.valueChanged.connect(lambda: self.apply_contrast_slider(0))
+        self.contrast_slider.valueChanged.connect(lambda: self.preview_contrast_slider(0))
         right_layout.addWidget(contrast_label)
         right_layout.addWidget(self.contrast_slider)
 
@@ -121,13 +139,12 @@ class MainWindow(QWidget):
         self.rotate_slider.setMinimum(-180)
         self.rotate_slider.setMaximum(180)
         self.rotate_slider.setValue(0)
-        self.rotate_slider.valueChanged.connect(self.apply_rotation)
+        self.rotate_slider.valueChanged.connect(self.preview_rotation)
         right_layout.addWidget(rotate_label)
         right_layout.addWidget(self.rotate_slider)
 
         right_layout.addStretch()
         self.right_panel.setLayout(right_layout)
-
 
         # ----- Área central (imagen) -----
         self.image_label = QLabel("Aquí se mostrará la imagen")
@@ -162,6 +179,21 @@ class MainWindow(QWidget):
             img = self.controller.load_image(path)
             self.show_image(img)
 
+    def update_histogram(self, image_np):
+        if image_np is not None:
+            img = (image_np * 255).astype(np.uint8) if image_np.max() <= 1.0 else image_np
+            R, G, B = img[..., 0], img[..., 1], img[..., 2]
+
+            self.hist_axes.clear()
+            self.hist_axes.hist(R.ravel(), bins=256, color='red', alpha=0.5, label='Rojo')
+            self.hist_axes.hist(G.ravel(), bins=256, color='green', alpha=0.5, label='Verde')
+            self.hist_axes.hist(B.ravel(), bins=256, color='blue', alpha=0.5, label='Azul')
+            self.hist_axes.set_title("Histograma RGB")
+            self.hist_axes.set_xlabel("Intensidad")
+            self.hist_axes.set_ylabel("Frecuencia")
+            self.hist_axes.legend()
+            self.hist_canvas.draw()
+
     def show_image(self, img_np):
         if img_np is not None:
             img_uint8 = (img_np * 255).astype(np.uint8)
@@ -170,54 +202,59 @@ class MainWindow(QWidget):
             qimg = QImage(img_uint8.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
             pixmap = QPixmap.fromImage(qimg).scaled(600, 600, Qt.AspectRatioMode.KeepAspectRatio)
             self.image_label.setPixmap(pixmap)
+            self.update_histogram(img_np)
 
-    def apply_contrast(self, value, mode):
-        img = self.controller.adjust_contrast(value, mode)
+
+    def preview_contrast(self, value, mode):
+        img = self.controller.preview_contrast(value, mode)
         self.show_image(img)
 
-    def apply_rgb(self, channel):
-        img = self.controller.extract_rgb(channel)
+    def preview_rgb(self, channel):
+        img = self.controller.preview_extract_rgb(channel)
         self.show_image(img)
 
-    def apply_cmy(self, channel):
-        img = self.controller.extract_cmy(channel)
+    def preview_cmy(self, channel):
+        img = self.controller.preview_extract_cmy(channel)
         self.show_image(img)
 
-    def apply_grayscale(self):
-        img = self.controller.grayscale()
+    def preview_grayscale(self):
+        img = self.controller.preview_grayscale()
         self.show_image(img)
 
-    def apply_negative(self):
+    def preview_negative(self):
         img = self.controller.get_processed_image()
         if img is not None:
             img = 1.0 - img
             self.show_image(img)
 
-    def apply_zoom(self):
+    def preview_zoom(self):
         value = self.zoom_slider.value()
-        img = self.controller.zoom_center(area_size=100, factor=value)
-        self.show_image(img)
-        
-    def apply_brightness(self):
-        value = self.brightness_slider.value() / 100  # escala [-1.0, 1.0]
-        img = self.controller.adjust_brightness(value)
+        img = self.controller.preview_zoom_center(area_size=100, factor=value)
         self.show_image(img)
 
-    def apply_contrast_slider(self, mode=0):
-        value = self.contrast_slider.value() / 100  # escala [0, 1]
-        img = self.controller.adjust_contrast(value, mode)
+    def preview_brightness(self):
+        value = self.brightness_slider.value() / 100
+        img = self.controller.preview_brightness(value)
         self.show_image(img)
 
-    def apply_rotation(self):
+    def preview_contrast_slider(self, mode=0):
+        value = self.contrast_slider.value() / 100
+        img = self.controller.preview_contrast(value, mode)
+        self.show_image(img)
+
+    def preview_rotation(self):
         angle = self.rotate_slider.value()
-        img = self.controller.rotate_manual(angle)
+        img = self.controller.preview_rotate_manual(angle)
         self.show_image(img)
+
+    def apply_changes(self):
+        self.controller.apply_preview()
+        self.show_image(self.controller.get_processed_image())
+
+    def discard_changes(self):
+        self.controller.discard_preview()
+        self.show_image(self.controller.get_processed_image())
 
     def reset_image(self):
         img = self.controller.reset_image()
-        self.show_image(img)
-
-    def apply_rotation(self):
-        angle = self.rotate_slider.value()
-        img = self.controller.rotate_manual(angle)
         self.show_image(img)
