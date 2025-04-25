@@ -42,13 +42,7 @@ python main.py
 
 
 📌 Próximas mejoras
-Guardar imagen procesada.
-
-Fusión entre múltiples imágenes.
-
-Histograma interactivo.
-
-Panel de historial o “deshacer”.
+Mejorar y factorizar funciones
 
 👨‍💻 Autor
 Daniel Bermúdez
